@@ -6,7 +6,13 @@ resource "aws_launch_template" "my_launch_template" {
   vpc_security_group_ids = [
     aws_security_group.my_sg.id
   ]
-  user_data = filebase64("${path.module}/user-data.sh")
+  iam_instance_profile {
+    name = aws_iam_instance_profile.cloudwatch_agent.name
+  }
+
+  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
+    cloudwatch_agent_config = file("${path.module}/cloudwatch-agent-config.json")
+  }))
   monitoring {
     enabled = true
   }
@@ -49,6 +55,11 @@ resource "aws_autoscaling_group" "my_asg" {
     value               = "my-asg-instance"
     propagate_at_launch = true
   }
+  depends_on = [
+    aws_iam_role_policy_attachment.cloudwatch_agent,
+    aws_cloudwatch_log_group.user_data,
+    aws_cloudwatch_log_group.docker
+  ]
 }
 resource "aws_autoscaling_policy" "cpu_target_tracking" {
   name                   = "my-asg-cpu-target-tracking"
