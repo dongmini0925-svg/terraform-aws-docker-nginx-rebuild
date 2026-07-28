@@ -387,3 +387,15 @@ CloudWatch Agent
 CloudWatch Logs
 장애 감지와 자동 복구
 ```
+## Terraform 리팩터링
+
+Terraform 코드의 재사용성과 관리 편의성을 높이기 위해 다음 항목을 개선했습니다.
+
+- AWS 리전 변수화
+- VPC 및 서브넷 CIDR 변수화
+- 가용 영역 변수화
+- 프로젝트 이름 기반 리소스 이름 통일
+- EC2 인스턴스 타입과 키페어 변수화
+- Auto Scaling Group 용량 변수화
+- 민감한 이메일 값을 `terraform.tfvars`로 분리
+- `terraform.tfvars`와 Terraform State를 Git에서 제외
