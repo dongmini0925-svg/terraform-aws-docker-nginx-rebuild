@@ -1,6 +1,6 @@
 # ALB 보안 그룹
 resource "aws_security_group" "my_alb_sg" {
-  name        = "my_alb_sg"
+  name        = "${var.project_name}-alb-sg"
   description = "Allow HTTP"
   vpc_id      = aws_vpc.my_vpc.id
 
@@ -21,13 +21,13 @@ resource "aws_security_group" "my_alb_sg" {
   }
 
   tags = {
-    Name = "my_alb_sg"
+    Name = "${var.project_name}-alb-sg"
   }
 }
 
 # Application Load Balancer
 resource "aws_lb" "my_alb" {
-  name               = "my-alb"
+  name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
 
@@ -41,13 +41,13 @@ resource "aws_lb" "my_alb" {
   ]
 
   tags = {
-    Name = "my_alb"
+    Name = "${var.project_name}-alb"
   }
 }
 
 # Target Group
 resource "aws_lb_target_group" "my_target_group" {
-  name        = "my-target-group"
+  name        = "${var.project_name}-tg"
   port        = 80
   protocol    = "HTTP"
   vpc_id      = aws_vpc.my_vpc.id
@@ -64,7 +64,7 @@ resource "aws_lb_target_group" "my_target_group" {
   }
 
   tags = {
-    Name = "my-target-group"
+    Name = "${var.project_name}-tg"
   }
 }
 

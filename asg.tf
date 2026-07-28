@@ -1,8 +1,8 @@
 resource "aws_launch_template" "my_launch_template" {
-  name_prefix   = "my-launch-template-"
+  name_prefix   = "${var.project_name}-lt-"
   image_id      = data.aws_ami.ubuntu.id
-  instance_type = "t3.micro"
-  key_name      = "MyWEB_Key"
+  instance_type = var.instance_type
+  key_name      = var.key_name
   vpc_security_group_ids = [
     aws_security_group.my_sg.id
   ]
@@ -20,17 +20,17 @@ resource "aws_launch_template" "my_launch_template" {
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name = "my-asg-instance"
+      Name = "${var.project_name}-asg-instance"
     }
   }
 }
 
 resource "aws_autoscaling_group" "my_asg" {
-  name = "my-asg"
+  name = "${var.project_name}-asg"
 
-  desired_capacity = 2
-  min_size         = 2
-  max_size         = 4
+  desired_capacity = var.asg_desired_capacity
+  min_size         = var.asg_min_size
+  max_size         = var.asg_max_size
 
   vpc_zone_identifier = [
     aws_subnet.my_subnet1.id,
@@ -52,7 +52,7 @@ resource "aws_autoscaling_group" "my_asg" {
 
   tag {
     key                 = "Name"
-    value               = "my-asg-instance"
+    value               = "${var.project_name}-asg-instance"
     propagate_at_launch = true
   }
   depends_on = [
@@ -62,7 +62,7 @@ resource "aws_autoscaling_group" "my_asg" {
   ]
 }
 resource "aws_autoscaling_policy" "cpu_target_tracking" {
-  name                   = "my-asg-cpu-target-tracking"
+  name                   = "${var.project_name}-cpu-target-tracking"
   autoscaling_group_name = aws_autoscaling_group.my_asg.name
   policy_type            = "TargetTrackingScaling"
 

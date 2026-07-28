@@ -1,35 +1,35 @@
 # VPC
 resource "aws_vpc" "my_vpc" {
-  cidr_block           = "10.0.0.0/16"
+  cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
 
   tags = {
-    Name = "my_vpc"
+    Name = "${var.project_name}-vpc"
   }
 }
 
 # 퍼블릭 서브넷 1
 resource "aws_subnet" "my_subnet1" {
   vpc_id                  = aws_vpc.my_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "ap-northeast-2a"
+  cidr_block              = var.public_subnet_cidrs[0]
+  availability_zone       = var.availability_zones[0]
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "my_subnet1"
+    Name = "${var.project_name}-public-subnet-1"
   }
 }
 
 # 퍼블릭 서브넷 2
 resource "aws_subnet" "my_subnet2" {
   vpc_id                  = aws_vpc.my_vpc.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "ap-northeast-2c"
+  cidr_block              = var.public_subnet_cidrs[1]
+  availability_zone       = var.availability_zones[1]
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "my_subnet2"
+    Name = "${var.project_name}-public-subnet-2"
   }
 }
 
@@ -38,7 +38,7 @@ resource "aws_internet_gateway" "my_igw" {
   vpc_id = aws_vpc.my_vpc.id
 
   tags = {
-    Name = "my_igw"
+    Name = "${var.project_name}-igw"
   }
 }
 
@@ -52,7 +52,7 @@ resource "aws_route_table" "my_route_table" {
   }
 
   tags = {
-    Name = "my_route_table"
+    Name = "${var.project_name}-public-rt"
   }
 }
 
@@ -70,7 +70,7 @@ resource "aws_route_table_association" "my_route_table_assoc2" {
 
 # EC2 보안 그룹
 resource "aws_security_group" "my_sg" {
-  name        = "my_sg"
+  name        = "${var.project_name}-ec2-sg"
   description = "Allow SSH and HTTP"
   vpc_id      = aws_vpc.my_vpc.id
 
@@ -84,6 +84,8 @@ resource "aws_security_group" "my_sg" {
       data.aws_ec2_managed_prefix_list.ec2_instance_connect.id
     ]
   }
+
+
 
   # HTTP
   ingress {
@@ -103,8 +105,9 @@ resource "aws_security_group" "my_sg" {
   }
 
   tags = {
-    Name = "my_sg"
+    Name = "${var.project_name}-ec2-sg"
   }
+
 }
 
 # 최신 Ubuntu 24.04 x86_64 AMI 조회
