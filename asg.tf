@@ -32,10 +32,7 @@ resource "aws_autoscaling_group" "my_asg" {
   min_size         = var.asg_min_size
   max_size         = var.asg_max_size
 
-  vpc_zone_identifier = [
-    aws_subnet.my_subnet1.id,
-    aws_subnet.my_subnet2.id
-  ]
+  vpc_zone_identifier = module.network.public_subnet_ids
 
   launch_template {
     id      = aws_launch_template.my_launch_template.id

@@ -2,7 +2,7 @@
 resource "aws_security_group" "my_alb_sg" {
   name        = "${var.project_name}-alb-sg"
   description = "Allow HTTP"
-  vpc_id      = aws_vpc.my_vpc.id
+  vpc_id      = module.network.vpc_id
 
   ingress {
     description = "HTTP"
@@ -35,10 +35,7 @@ resource "aws_lb" "my_alb" {
     aws_security_group.my_alb_sg.id
   ]
 
-  subnets = [
-    aws_subnet.my_subnet1.id,
-    aws_subnet.my_subnet2.id
-  ]
+  subnets = module.network.public_subnet_ids
 
   tags = {
     Name = "${var.project_name}-alb"
@@ -50,7 +47,7 @@ resource "aws_lb_target_group" "my_target_group" {
   name        = "${var.project_name}-tg"
   port        = 80
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.my_vpc.id
+  vpc_id      = module.network.vpc_id
   target_type = "instance"
 
   health_check {
