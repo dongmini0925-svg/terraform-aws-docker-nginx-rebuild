@@ -11,11 +11,11 @@ data "aws_iam_policy_document" "ec2_assume_role" {
 }
 
 resource "aws_iam_role" "cloudwatch_agent" {
-  name               = "my-asg-cloudwatch-agent-role"
+  name               = "${var.project_name}-cloudwatch-agent-role"
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
 
   tags = {
-    Name = "my-asg-cloudwatch-agent-role"
+    name = "${var.project_name}-cloudwatch-agent-role"
   }
 }
 

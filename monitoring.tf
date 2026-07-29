@@ -5,10 +5,10 @@ variable "alert_email" {
 
 # 장애 알림용 SNS Topic
 resource "aws_sns_topic" "alarm_notifications" {
-  name = "my-asg-alarm-notifications"
+  name = "${var.project_name}-alarm-notifications"
 
   tags = {
-    Name = "my-asg-alarm-notifications"
+    name = "${var.project_name}-alarm-notifications"
   }
 }
 
