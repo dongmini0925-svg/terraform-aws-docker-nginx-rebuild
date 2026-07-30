@@ -399,3 +399,54 @@ Terraform 코드의 재사용성과 관리 편의성을 높이기 위해 다음 
 - Auto Scaling Group 용량 변수화
 - 민감한 이메일 값을 `terraform.tfvars`로 분리
 - `terraform.tfvars`와 Terraform State를 Git에서 제외
+
+## Terraform 환경 분리
+
+동일한 Terraform 코드를 사용하면서 개발 환경과 운영 환경의 변수 및 State를 분리했습니다.
+
+```text
+environments/
+├─ dev.backend.hcl
+├─ prod.backend.hcl
+├─ dev.tfvars.example
+└─ prod.tfvars.example
+```
+
+### 환경별 설정
+
+| 항목 | dev | prod |
+|---|---|---|
+| 프로젝트 이름 | `docker-nginx-dev` | `docker-nginx-prod` |
+| VPC CIDR | `10.10.0.0/16` | `10.20.0.0/16` |
+| 인스턴스 유형 | `t3.micro` | `t3.small` |
+| ASG 최소 용량 | `1` | `2` |
+| ASG 희망 용량 | `1` | `2` |
+| ASG 최대 용량 | `2` | `4` |
+| State 경로 | `environments/dev/terraform.tfstate` | `environments/prod/terraform.tfstate` |
+
+실제 환경 변수 파일에는 알림 이메일 등 사용자별 값이 포함되므로 Git에서 제외하고, 공개 가능한 `.tfvars.example` 파일만 저장소에 포함합니다.
+
+### dev 환경 실행
+
+```powershell
+Copy-Item environments\dev.tfvars.example environments\dev.tfvars
+terraform init -reconfigure "-backend-config=environments/dev.backend.hcl"
+terraform plan "-var-file=environments/dev.tfvars"
+```
+
+### prod 환경 실행
+
+```powershell
+Copy-Item environments\prod.tfvars.example environments\prod.tfvars
+terraform init -reconfigure "-backend-config=environments/prod.backend.hcl"
+terraform plan "-var-file=environments/prod.tfvars"
+```
+
+환경을 전환할 때는 Backend 설정 파일과 변수 파일을 반드시 같은 환경으로 지정해야 합니다.
+
+```text
+dev.backend.hcl  + dev.tfvars
+prod.backend.hcl + prod.tfvars
+```
+
+현재 프로젝트는 검증 목적으로 `terraform plan`까지만 실행했으며, 실제 AWS 리소스를 생성하는 `terraform apply`는 실행하지 않았습니다.
