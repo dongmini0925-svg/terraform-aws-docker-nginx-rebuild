@@ -450,3 +450,72 @@ prod.backend.hcl + prod.tfvars
 ```
 
 현재 프로젝트는 검증 목적으로 `terraform plan`까지만 실행했으며, 실제 AWS 리소스를 생성하는 `terraform apply`는 실행하지 않았습니다.
+
+## ECS Fargate 배포 및 CI/CD
+
+기존 Docker Nginx 이미지를 Amazon ECR에 저장하고, ECS Fargate에서 실행하도록 구성했습니다.
+
+```text
+GitHub Push
+→ GitHub Actions
+→ Docker 이미지 빌드
+→ Amazon ECR Push
+→ 새 Task Definition 개정 등록
+→ ECS Service 업데이트
+→ Fargate Task 교체
+→ ALB를 통한 서비스 접속
+```
+
+### 주요 구성
+
+- **Amazon ECR**: Docker 이미지 저장
+- **ECS Cluster**: Service와 Task를 관리하는 논리적 공간
+- **Task Definition**: 이미지, CPU, 메모리, 포트, 로그 설정 정의
+- **ECS Service**: 원하는 Task 수 유지 및 새 버전 배포
+- **AWS Fargate**: EC2 서버를 직접 관리하지 않고 컨테이너 실행
+- **Application Load Balancer**: 외부 요청을 정상 Task로 전달
+- **CloudWatch Logs**: Nginx 컨테이너 로그 수집
+
+### 배포 보안
+
+GitHub Actions는 장기 Access Key를 저장하지 않고 GitHub OIDC를 통해 `GitHubActions-ECS-Deploy` IAM Role의 임시 자격 증명을 사용합니다.
+
+배포 역할에는 다음 범위의 권한만 부여했습니다.
+
+- ECR 이미지 Push
+- Task Definition 등록
+- ECS Service 업데이트 및 조회
+- `ecsTaskExecutionRole` 전달
+
+### GitHub Actions 자동 배포
+
+ECS 배포 워크플로:
+
+```text
+.github/workflows/ecs-deploy.yml
+```
+
+다음 파일이 `main` 브랜치에 Push되면 ECS 배포가 실행됩니다.
+
+```text
+docker/**
+ecs-manual/task-definition.json
+.github/workflows/ecs-deploy.yml
+```
+
+Docker 이미지에는 `latest` 태그와 GitHub 커밋 SHA 태그를 함께 사용하며, 실제 Task Definition에는 커밋 SHA 이미지가 등록됩니다.
+
+### 배포 검증 결과
+
+```text
+Task Definition Revision : 2
+ECS Service Desired      : 1
+ECS Service Running      : 1
+ECS Service Pending      : 0
+Deployment Rollout       : COMPLETED
+Target Group State       : healthy
+ALB HTTP Response        : 200
+CloudWatch Logs          : GET / HTTP/1.1 200
+```
+
+수동 배포로 전체 구조를 먼저 검증한 뒤 GitHub Actions를 연결해, 코드 Push부터 ECS Service 업데이트까지 자동화했습니다.
