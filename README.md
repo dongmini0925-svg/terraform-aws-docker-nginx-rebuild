@@ -451,71 +451,183 @@ prod.backend.hcl + prod.tfvars
 
 현재 프로젝트는 검증 목적으로 `terraform plan`까지만 실행했으며, 실제 AWS 리소스를 생성하는 `terraform apply`는 실행하지 않았습니다.
 
-## ECS Fargate 배포 및 CI/CD
+## ECS Fargate Terraform 및 GitHub Actions CI/CD
 
-기존 Docker Nginx 이미지를 Amazon ECR에 저장하고, ECS Fargate에서 실행하도록 구성했습니다.
+기존 Docker Nginx 애플리케이션을 ECS Fargate에 배포하고, GitHub Actions를 통한 자동 배포를 구성했습니다.
+
+먼저 AWS CLI로 전체 구조를 수동 생성해 동작을 확인한 뒤, 기존 리소스는 Terraform으로 import하고 삭제한 리소스는 Terraform 코드로 다시 생성했습니다.
+
+기존 EC2·Auto Scaling 구성과 State 충돌을 피하기 위해 같은 저장소 안에 `ecs-fargate/` 전용 Root Module과 별도 Remote State를 구성했습니다.
 
 ```text
 GitHub Push
-→ GitHub Actions
+→ GitHub Actions OIDC 인증
 → Docker 이미지 빌드
 → Amazon ECR Push
-→ 새 Task Definition 개정 등록
-→ ECS Service 업데이트
-→ Fargate Task 교체
-→ ALB를 통한 서비스 접속
+→ Task Definition 새 개정 등록
+→ ECS Service Rolling Deployment
+→ Fargate Task
+→ Application Load Balancer
 ```
 
-### 주요 구성
+### 디렉터리 구조
 
-- **Amazon ECR**: Docker 이미지 저장
-- **ECS Cluster**: Service와 Task를 관리하는 논리적 공간
-- **Task Definition**: 이미지, CPU, 메모리, 포트, 로그 설정 정의
-- **ECS Service**: 원하는 Task 수 유지 및 새 버전 배포
-- **AWS Fargate**: EC2 서버를 직접 관리하지 않고 컨테이너 실행
-- **Application Load Balancer**: 외부 요청을 정상 Task로 전달
-- **CloudWatch Logs**: Nginx 컨테이너 로그 수집
+```text
+ecs-fargate/
+├─ backend.tf
+├─ versions.tf
+├─ provider.tf
+├─ variables.tf
+├─ ecr.tf
+├─ iam.tf
+├─ network.tf
+├─ monitoring.tf
+├─ ecs.tf
+├─ task-definition.tf
+├─ service.tf
+├─ alb.tf
+├─ outputs.tf
+└─ environments/
+   └─ dev.backend.hcl
+```
 
-### 배포 보안
+ECS 전용 State는 기존 Terraform State와 분리했습니다.
 
-GitHub Actions는 장기 Access Key를 저장하지 않고 GitHub OIDC를 통해 `GitHubActions-ECS-Deploy` IAM Role의 임시 자격 증명을 사용합니다.
+```text
+ecs-fargate/environments/dev/terraform.tfstate
+```
 
-배포 역할에는 다음 범위의 권한만 부여했습니다.
+### Terraform 관리 방식
 
-- ECR 이미지 Push
-- Task Definition 등록
-- ECS Service 업데이트 및 조회
-- `ecsTaskExecutionRole` 전달
+수동으로 생성되어 있던 다음 리소스는 `terraform import`로 State에 연결했습니다.
+
+- Amazon ECR Repository
+- ECS Task Execution IAM Role
+- IAM Managed Policy 연결
+- CloudWatch Log Group
+- ALB Security Group
+- ECS Task Security Group
+
+다음 리소스는 Terraform으로 새로 생성했습니다.
+
+- ECS Cluster
+- Application Load Balancer
+- Target Group
+- HTTP Listener
+- ECS Task Definition
+- ECS Service
+
+```text
+Terraform 코드
+↕
+Terraform Remote State
+↕
+실제 AWS 리소스
+```
+
+### 네트워크 보안
+
+```text
+인터넷
+→ ALB Security Group: TCP 80 허용
+→ ALB
+→ Task Security Group: ALB Security Group에서 오는 TCP 80만 허용
+→ Fargate Task
+```
+
+Fargate Task는 기본 VPC의 서브넷에서 실행되며, ALB Target Group은 `ip` 대상 유형을 사용합니다.
 
 ### GitHub Actions 자동 배포
 
-ECS 배포 워크플로:
+워크플로 파일:
 
 ```text
 .github/workflows/ecs-deploy.yml
 ```
 
-다음 파일이 `main` 브랜치에 Push되면 ECS 배포가 실행됩니다.
+자동 배포 과정:
 
-```text
-docker/**
-ecs-manual/task-definition.json
-.github/workflows/ecs-deploy.yml
+1. GitHub OIDC로 AWS IAM Role의 임시 자격 증명 발급
+2. Docker 이미지 빌드
+3. ECR에 `latest` 및 GitHub Commit SHA 태그 Push
+4. Commit SHA 이미지로 Task Definition 새 개정 등록
+5. ECS Service 업데이트
+6. Service가 안정화될 때까지 대기
+
+GitHub에 장기 AWS Access Key를 저장하지 않고 `GitHubActions-ECS-Deploy` IAM Role을 사용합니다.
+
+Terraform은 ECS 인프라를 관리하고, GitHub Actions는 실제 애플리케이션 이미지와 Task Definition 개정을 관리합니다.
+
+```hcl
+lifecycle {
+  ignore_changes = [
+    task_definition
+  ]
+}
 ```
 
-Docker 이미지에는 `latest` 태그와 GitHub 커밋 SHA 태그를 함께 사용하며, 실제 Task Definition에는 커밋 SHA 이미지가 등록됩니다.
+이 설정을 통해 GitHub Actions가 배포한 Task Definition 개정을 Terraform이 이전 상태로 되돌리지 않도록 구성했습니다.
 
-### 배포 검증 결과
+### 배포 검증
+
+Terraform 적용 결과:
 
 ```text
-Task Definition Revision : 2
-ECS Service Desired      : 1
-ECS Service Running      : 1
-ECS Service Pending      : 0
-Deployment Rollout       : COMPLETED
-Target Group State       : healthy
-ALB HTTP Response        : 200
-CloudWatch Logs          : GET / HTTP/1.1 200
+Apply complete! Resources: 6 added, 0 changed, 0 destroyed.
 ```
 
-수동 배포로 전체 구조를 먼저 검증한 뒤 GitHub Actions를 연결해, 코드 Push부터 ECS Service 업데이트까지 자동화했습니다.
+ECS Service 상태:
+
+```text
+Desired : 1
+Running : 1
+Pending : 0
+Rollout : COMPLETED
+```
+
+GitHub Actions 자동 배포 후 ALB를 통해 다음 문구가 정상 출력되는 것을 확인했습니다.
+
+```text
+GitHub Actions와 ECS Fargate를 통한 자동 배포에 성공했습니다.
+```
+
+### 실행 화면
+
+#### Terraform 인프라 생성
+
+![Terraform Apply 성공](SCREENSHOT/ecs-fargate/01-terraform-apply-success.png)
+
+#### ECS Service 정상화
+
+![ECS Service 정상 상태](SCREENSHOT/ecs-fargate/02-ecs-service-stable.png)
+
+#### GitHub Actions 자동 배포
+
+![GitHub Actions ECS 배포 성공](SCREENSHOT/ecs-fargate/03-github-actions-deploy-success.png)
+
+#### ALB 서비스 접속
+
+![ECS Fargate 서비스 접속 성공](SCREENSHOT/ecs-fargate/04-alb-browser-success.png)
+
+#### 과금 리소스 정리
+
+![실행 리소스 삭제 완료](SCREENSHOT/ecs-fargate/05-runtime-cleanup-success.png)
+
+### 과금 리소스 관리
+
+배포 검증 후 지속 과금을 막기 위해 다음 실행 리소스만 삭제했습니다.
+
+- ECS Service
+- Application Load Balancer
+- Target Group
+- HTTP Listener
+
+현재 실행 중인 Fargate Task는 `0`개이며, Terraform 코드는 유지되어 있습니다.
+
+```text
+Plan: 4 to add, 0 to change, 0 to destroy.
+```
+
+따라서 필요할 때 Terraform을 다시 적용하면 실행 환경을 재생성할 수 있습니다.
+
+> 전체 `terraform destroy`를 실행하면 import한 ECR, IAM Role, Log Group, Security Group까지 실제로 삭제될 수 있으므로 주의해야 합니다.
