@@ -10,3 +10,8 @@ crash.*.logportfolio-screenshots/
 portfolio-screenshots/
 
 state-check.json
+
+ecs-manual/service.json
+ecs-tasks-trust-policy.json
+github-ecs-deploy-policy.json
+github-ecs-trust-policy.json

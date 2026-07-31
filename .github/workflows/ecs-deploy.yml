@@ -1,0 +1,77 @@
+name: Deploy Docker Image to ECS Fargate
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docker/**"
+      - "ecs-manual/task-definition.json"
+      - ".github/workflows/ecs-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: docker-nginx-fargate
+  ECS_CLUSTER: docker-nginx-fargate-cluster
+  ECS_SERVICE: docker-nginx-fargate-service
+  ECS_TASK_DEFINITION: ecs-manual/task-definition.json
+  CONTAINER_NAME: docker-nginx
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::577201458280:role/GitHubActions-ECS-Deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          image="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          latest_image="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          docker build \
+            -t "$image" \
+            -t "$latest_image" \
+            ./docker
+
+          docker push "$image"
+          docker push "$latest_image"
+
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Render ECS task definition
+        id: task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-definition.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE }}
+          wait-for-service-stability: true
+          wait-max-delay-seconds: 15

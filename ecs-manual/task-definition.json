@@ -1,0 +1,35 @@
+{
+    "family":  "docker-nginx-fargate",
+    "networkMode":  "awsvpc",
+    "requiresCompatibilities":  [
+                                    "FARGATE"
+                                ],
+    "cpu":  "256",
+    "memory":  "512",
+    "executionRoleArn":  "arn:aws:iam::577201458280:role/ecsTaskExecutionRole",
+    "runtimePlatform":  {
+                            "operatingSystemFamily":  "LINUX",
+                            "cpuArchitecture":  "X86_64"
+                        },
+    "containerDefinitions":  [
+                                 {
+                                     "name":  "docker-nginx",
+                                     "image":  "577201458280.dkr.ecr.ap-northeast-2.amazonaws.com/docker-nginx-fargate:latest",
+                                     "essential":  true,
+                                     "portMappings":  [
+                                                          {
+                                                              "containerPort":  80,
+                                                              "protocol":  "tcp"
+                                                          }
+                                                      ],
+                                     "logConfiguration":  {
+                                                              "logDriver":  "awslogs",
+                                                              "options":  {
+                                                                              "awslogs-group":  "/ecs/docker-nginx-fargate",
+                                                                              "awslogs-region":  "ap-northeast-2",
+                                                                              "awslogs-stream-prefix":  "ecs"
+                                                                          }
+                                                          }
+                                 }
+                             ]
+}
