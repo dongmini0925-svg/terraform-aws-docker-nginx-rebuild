@@ -15,3 +15,5 @@ ecs-manual/service.json
 ecs-tasks-trust-policy.json
 github-ecs-deploy-policy.json
 github-ecs-trust-policy.json
+
+*.tfplan
